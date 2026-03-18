@@ -130,7 +130,7 @@ function read(::Type{Array{T,N}}, hdu::FitsAnyHDU; kwds...) where {T<:Number,N}
 
     nd = get_img_dim(file)
     nd == N || throw(DimensionMismatch("image extension has ndims=$nd not N=$N"))
-N == 0 && throw(ArgumentError("NAXIS=0 image HDU has no data payload; use `read(Array, hdu)` or `read(Array{T}, hdu)`"))
+    N == 0 && throw(ArgumentError("NAXIS=0 image HDU has no data payload; use `read(Array, hdu)` or `read(Array{T}, hdu)`"))
 
 
     dims_ref = Ref{NTuple{N,Clong}}()
@@ -266,7 +266,7 @@ function read!(arr::DenseArray{T,L},
         # because it is not possible to guess one given the other and the size of the array
         # to read as it may have fewer dimensions than the image.
         if step === nothing
-            ipix = NTuple(i -> one(Clong), Val(N))::NTuple{N,Clong}
+            ipix = ntuple(i -> one(Clong), Val(N))::NTuple{N,Clong}
         else
             ipix = as(NTuple{N,Clong}, step)
         end
@@ -294,7 +294,7 @@ function read!(arr::DenseArray{T,L},
                     "image extension and output array have differente sizes"))
                 fpix = 1
             else first === nothing
-                fpix = Int(fpix, len + 1 - last)::Int
+                fpix = Int(last + 1 - len)::Int
             end
         else
             last === nothing || last + 1 - first == len || throw(DimensionMismatch(
@@ -305,11 +305,11 @@ function read!(arr::DenseArray{T,L},
         if null isa DenseArray{Bool,L}
             axes(null) == axes(arr) || error("incompatible array axes")
             if len > 0
-                # NOTE: `GC.@protect null` is not needed here.
-                _null = logical_pointer(null)
-                check(CFITSIO.fits_read_imgnull(
-                    hdu, type, fpix, len, _null, arr, anynul, Ref{Cint}(0)))
-                fix_logicals!(null)
+                GC.@preserve null begin
+                    _null = Cstring(Base.unsafe_convert(Ptr{Cchar}, pointer(null)))
+                    check(CFITSIO.fits_read_imgnull(
+                        hdu, type, fpix, len, arr, _null, anynul, Ref{Cint}(0)))
+                end
             end
         elseif len > 0
             _null = (null === nothing ? C_NULL : null)
@@ -512,7 +512,7 @@ function write(hdu::FitsImageHDU{<:Any,N},
                     "image extension and input array have different sizes"))
                 fpix = 1
             else first === nothing
-                fpix = Int(fpix, len + 1 - last)::Int
+                fpix = Int(last + 1 - len)::Int
             end
         else
             last === nothing || last + 1 - first == len || throw(DimensionMismatch(
